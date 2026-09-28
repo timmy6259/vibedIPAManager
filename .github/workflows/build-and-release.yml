@@ -1,0 +1,97 @@
+name: Build and Release Alpha
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    name: Build iOS App
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.2'
+      
+      - name: Build for iOS
+        run: |
+          xcodebuild build \
+            -scheme vibedIPAManager \
+            -configuration Release \
+            -derivedDataPath DerivedData \
+            -arch arm64 \
+            IPHONEOS_DEPLOYMENT_TARGET=16.0 \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO
+      
+      - name: Create IPA (unsigned)
+        run: |
+          mkdir -p Payload
+          cp -r DerivedData/Build/Products/Release-iphoneos/vibedIPAManager.app Payload/
+          zip -r -q vibedIPAManager-Alpha-unsigned.ipa Payload/
+          rm -rf Payload
+      
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: vibedIPAManager-Alpha
+          path: vibedIPAManager-Alpha-unsigned.ipa
+          retention-days: 30
+  
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Create Alpha Release
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: vibedIPAManager-Alpha
+      
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}-alpha
+          release_name: Alpha ${{ github.run_number }}
+          body: |
+            **Alpha Release**
+            
+            Build #${{ github.run_number }}
+            Commit: ${{ github.sha }}
+            
+            **Note:** This IPA is unsigned. You must re-sign it with your own provisioning profile before installation.
+            
+            To re-sign on macOS:
+            ```bash
+            rm -rf Payload
+            mkdir Payload
+            cp -r path/to/your/app Payload/YourApp.app
+            codesign -fs - Payload/YourApp.app
+            zip -r YourApp.ipa Payload/
+            ```
+          prerelease: true
+          draft: false
+      
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./vibedIPAManager-Alpha-unsigned.ipa
+          asset_name: vibedIPAManager-Alpha-unsigned.ipa
+          asset_content_type: application/zip
