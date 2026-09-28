@@ -20,13 +20,38 @@ jobs:
         with:
           xcode-version: '26.2'
       
+      - name: Debug - List current directory
+        run: |
+          pwd
+          ls -la
+      
+      - name: Install xcodegen
+        run: |
+          brew install xcodegen
+      
+      - name: Debug - Verify project.yml exists
+        run: |
+          ls -la project.yml
+          cat project.yml
+      
+      - name: Generate Xcode project
+        run: |
+          xcodegen generate --verbose
+      
+      - name: Debug - List generated files
+        run: |
+          ls -la
+          find . -name "*.xcodeproj" -type d
+      
       - name: Build for iOS
         run: |
           xcodebuild build \
+            -project vibedIPAManager.xcodeproj \
             -scheme vibedIPAManager \
             -configuration Release \
             -derivedDataPath DerivedData \
             -arch arm64 \
+            -sdk iphoneos \
             IPHONEOS_DEPLOYMENT_TARGET=16.0 \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO
