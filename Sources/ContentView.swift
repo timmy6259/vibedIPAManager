@@ -7,45 +7,51 @@ struct ContentView: View {
     @State private var ipaContents: [String] = []
     @State private var status = "Choose an IPA to begin."
     @State private var selectedFiles: Set<String> = []
-    @State private var showingFileDetails = false
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
+            VStack {
                 if ipaContents.isEmpty {
-                    ContentUnavailableView(
-                        "Tiny IPA Manager",
-                        systemImage: "shippingbox",
-                        description: Text(status)
-                    )
+                    VStack(spacing: 12) {
+                        Image(systemName: "shippingbox")
+                            .font(.system(size: 52))
+                            .foregroundColor(.secondary)
+
+                        Text("Tiny IPA Manager")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+
+                        Text(status)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(ipaContents, id: \.self, selection: $selectedFiles) { file in
                         HStack {
                             Image(systemName: "doc.fill")
                                 .foregroundColor(.blue)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(file)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                            }
+                            Text(file)
+                                .font(.caption)
+                                .lineLimit(1)
                         }
-                        .contentShape(Rectangle())
                     }
                     .environment(\.editMode, .constant(.active))
-                    
+
                     HStack(spacing: 12) {
                         Button(action: { selectedFiles.removeAll() }) {
                             Label("Clear", systemImage: "xmark.circle")
                         }
                         .disabled(selectedFiles.isEmpty)
-                        
+
                         Button(role: .destructive, action: { removeSelectedFiles() }) {
                             Label("Remove", systemImage: "trash")
                         }
                         .disabled(selectedFiles.isEmpty)
-                        
+
                         Spacer()
-                        
+
                         Button(action: { exportModifiedIPA() }) {
                             Label("Export", systemImage: "square.and.arrow.up")
                         }
@@ -57,7 +63,9 @@ struct ContentView: View {
             .navigationTitle("vibedIPAManager")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Import IPA") { showingImporter = true }
+                    Button("Import IPA") {
+                        showingImporter = true
+                    }
                 }
             }
         }
@@ -66,21 +74,17 @@ struct ContentView: View {
             allowedContentTypes: [.init(filenameExtension: "ipa") ?? .archive],
             allowsMultipleSelection: false
         ) { result in
-            handleIPAImport(result)
+            switch result {
+            case .success(let urls):
+                guard let ipaURL = urls.first else { return }
+                selectedIPA = ipaURL
+                loadIPAContents(ipaURL)
+            case .failure(let error):
+                status = "Import failed: \(error.localizedDescription)"
+            }
         }
     }
-    
-    private func handleIPAImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let ipaURL = urls.first else { return }
-            selectedIPA = ipaURL
-            loadIPAContents(ipaURL)
-        case .failure(let error):
-            status = "Import failed: \(error.localizedDescription)"
-        }
-    }
-    
+
     private func loadIPAContents(_ ipaURL: URL) {
         DispatchQueue.global(qos: .userInitiated).async {
             do {
@@ -96,18 +100,20 @@ struct ContentView: View {
             }
         }
     }
-    
+
     private func removeSelectedFiles() {
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 guard let ipaURL = selectedIPA else { return }
+
                 for file in selectedFiles {
                     try IPAManager.removeFile(at: file, in: ipaURL)
                 }
+
                 DispatchQueue.main.async {
                     ipaContents.removeAll { selectedFiles.contains($0) }
                     selectedFiles.removeAll()
-                    status = "Removed \(selectedFiles.count) files"
+                    status = "Removed selected files"
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -116,7 +122,7 @@ struct ContentView: View {
             }
         }
     }
-    
+
     private func exportModifiedIPA() {
         status = "Export feature coming soon..."
     }

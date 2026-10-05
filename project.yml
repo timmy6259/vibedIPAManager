@@ -4,7 +4,10 @@ options:
   deploymentTarget:
     iOS: "16.0"
 
-packages: {}
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    from: 0.9.19
 
 targets:
   vibedIPAManager:
@@ -14,6 +17,8 @@ targets:
     sources:
       - path: Sources
         createIntermediateGroups: true
+    dependencies:
+      - package: ZIPFoundation
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.timmy6259.vibedIPAManager
       MARKETING_VERSION: 1.0.0
