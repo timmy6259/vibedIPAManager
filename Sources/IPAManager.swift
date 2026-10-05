@@ -4,13 +4,32 @@ import ZIPFoundation
 class IPAManager {
     static func extractIPA(at ipaURL: URL) throws -> URL {
         DebugLogger.shared.debug("Starting extraction for \(ipaURL.lastPathComponent)", category: "IPA")
+        
+        // Validate file exists and is accessible
+        guard FileManager.default.fileExists(atPath: ipaURL.path) else {
+            let errorMsg = "IPA file does not exist at path: \(ipaURL.path)"
+            DebugLogger.shared.error(errorMsg, category: "IPA")
+            throw IPAError.fileNotFound
+        }
+        
+        // Check if file is readable
+        guard FileManager.default.isReadableFileAtPath(ipaURL.path) else {
+            let errorMsg = "IPA file is not readable: \(ipaURL.path)"
+            DebugLogger.shared.error(errorMsg, category: "IPA")
+            throw IPAError.fileNotReadable
+        }
+        
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
 
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
+        // Try to open archive with better error handling
         guard let archive = Archive(url: ipaURL, accessMode: .read) else {
-            DebugLogger.shared.error("Archive could not be opened: \(ipaURL.lastPathComponent)", category: "IPA")
+            let errorMsg = "Archive could not be opened: \(ipaURL.lastPathComponent). The file may be corrupted or not a valid ZIP archive."
+            DebugLogger.shared.error(errorMsg, category: "IPA")
+            // Cleanup temp directory on failure
+            try? FileManager.default.removeItem(at: tempDir)
             throw IPAError.extractionFailed
         }
 
@@ -120,13 +139,19 @@ class IPAManager {
 enum IPAError: Error, LocalizedError {
     case extractionFailed
     case repackagingFailed
+    case fileNotFound
+    case fileNotReadable
 
     var errorDescription: String? {
         switch self {
         case .extractionFailed:
-            return "Failed to extract the IPA file."
+            return "Failed to extract the IPA file. It may be corrupted or not a valid ZIP archive."
         case .repackagingFailed:
             return "Failed to repackage the IPA file."
+        case .fileNotFound:
+            return "The IPA file does not exist."
+        case .fileNotReadable:
+            return "The IPA file cannot be read. Check file permissions."
         }
     }
 }
