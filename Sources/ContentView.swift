@@ -90,6 +90,14 @@ struct ContentView: View {
             switch result {
             case .success(let urls):
                 guard let ipaURL = urls.first else { return }
+
+                // Keep the imported file accessible across the sandbox after picker closes.
+                guard ipaURL.startAccessingSecurityScopedResource() else {
+                    status = "Failed to access the selected IPA file."
+                    DebugLogger.shared.error("Unable to access the imported IPA file securely.", category: "Import")
+                    return
+                }
+
                 selectedIPA = ipaURL
                 DebugLogger.shared.info("Importing IPA: \(ipaURL.lastPathComponent)", category: "Import")
                 loadIPAContents(ipaURL)
@@ -122,6 +130,12 @@ struct ContentView: View {
 
     private func removeSelectedFiles() {
         DebugLogger.shared.debug("Removing \(selectedFiles.count) selected files", category: "IPA")
+
+        defer {
+            if let ipaURL = selectedIPA {
+                ipaURL.stopAccessingSecurityScopedResource()
+            }
+        }
 
         DispatchQueue.global(qos: .userInitiated).async {
             do {
