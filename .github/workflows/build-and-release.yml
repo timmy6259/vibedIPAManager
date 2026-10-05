@@ -3,10 +3,12 @@ name: Build and Release
 on:
   push:
     branches:
-      - main
-      - develop
-      - release/**
+      - '**'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.repository }}-${{ github.ref_name }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -50,39 +52,49 @@ jobs:
         run: |
           mkdir -p Payload
           cp -r DerivedData/Build/Products/Release-iphoneos/vibedIPAManager.app Payload/
-          zip -r -q vibedIPAManager-unstable.ipa Payload/
+          zip -r -q vibedIPAManager-${{ github.ref_name }}-unsigned.ipa Payload/
           rm -rf Payload
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: vibedIPAManager-${{ github.ref_name }}
-          path: vibedIPAManager-unstable.ipa
+          path: vibedIPAManager-${{ github.ref_name }}-unsigned.ipa
           retention-days: 30
 
   release:
     needs: build
     runs-on: ubuntu-latest
-    name: Create Unstable Pre-release
-    if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/')
+    name: Create Continuous Pre-release
     permissions:
       contents: write
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: vibedIPAManager-${{ github.ref_name }}
 
-      - name: Create GitHub unstable pre-release
-        uses: softprops/action-gh-release@v2
+      - name: Create GitHub continuous pre-release
+        uses: docker://ghcr.io/mini-bomba/create-github-release:main
         with:
-          tag_name: unstable
-          name: Unstable Pre-release
-          generate_release_notes: true
-          prerelease: true
-          overwrite_files: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: "Continuous Pre-releases"
+          tag: "continuous"
+          body: |
+            This automatic pre-release is built from commit ${{ github.sha }} and was triggered by @${{ github.actor }}
+            [Github Actions workflow run that built this pre-release](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            Builds from all branches are available under this pre-release. The latest build for each branch is available as:
+            `vibedIPAManager-{branch-name}-unsigned.ipa`
+            
+            Latest build: `vibedIPAManager-${{ github.ref_name }}-unsigned.ipa`
           files: |
-            vibedIPAManager-unstable.ipa
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            vibedIPAManager-${{ github.ref_name }}-unsigned.ipa
+          clear_attachments: false
+          prerelease: true
