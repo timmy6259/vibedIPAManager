@@ -1,9 +1,11 @@
-name: Build and Release Alpha
+name: Build and Release
 
 on:
   push:
     branches:
       - main
+      - develop
+      - release/**
   workflow_dispatch:
 
 permissions:
@@ -48,22 +50,20 @@ jobs:
         run: |
           mkdir -p Payload
           cp -r DerivedData/Build/Products/Release-iphoneos/vibedIPAManager.app Payload/
-          zip -r -q vibedIPAManager-Alpha-unsigned.ipa Payload/
+          zip -r -q vibedIPAManager-${{ github.ref_name }}-unsigned.ipa Payload/
           rm -rf Payload
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vibedIPAManager-Alpha
-          path: vibedIPAManager-Alpha-unsigned.ipa
+          name: vibedIPAManager-${{ github.ref_name }}
+          path: vibedIPAManager-${{ github.ref_name }}-unsigned.ipa
           retention-days: 30
 
   release:
     needs: build
     runs-on: ubuntu-latest
-    name: Create Alpha Release
-    if: github.ref == 'refs/heads/main'
-
+    name: Create Release
     permissions:
       contents: write
 
@@ -71,16 +71,34 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: vibedIPAManager-Alpha
+          name: vibedIPAManager-${{ github.ref_name }}
 
-      - name: Create GitHub prerelease
+      - name: Determine release metadata
+        id: release_meta
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          if [[ "$BRANCH_NAME" == "main" ]]; then
+            echo "tag_name=v${{ github.run_number }}" >> $GITHUB_OUTPUT
+            echo "release_name=Release ${{ github.run_number }}" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          elif [[ "$BRANCH_NAME" == "develop" ]]; then
+            echo "tag_name=v${{ github.run_number }}-beta" >> $GITHUB_OUTPUT
+            echo "release_name=Beta ${{ github.run_number }}" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag_name=v${{ github.run_number }}-$BRANCH_NAME" >> $GITHUB_OUTPUT
+            echo "release_name=$BRANCH_NAME Build ${{ github.run_number }}" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}-alpha
-          name: Alpha ${{ github.run_number }}
+          tag_name: ${{ steps.release_meta.outputs.tag_name }}
+          name: ${{ steps.release_meta.outputs.release_name }}
           generate_release_notes: true
-          prerelease: true
+          prerelease: ${{ steps.release_meta.outputs.prerelease }}
           files: |
-            vibedIPAManager-Alpha-unsigned.ipa
+            vibedIPAManager-${{ github.ref_name }}-unsigned.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
