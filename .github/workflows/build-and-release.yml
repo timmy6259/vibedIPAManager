@@ -50,20 +50,21 @@ jobs:
         run: |
           mkdir -p Payload
           cp -r DerivedData/Build/Products/Release-iphoneos/vibedIPAManager.app Payload/
-          zip -r -q vibedIPAManager-${{ github.ref_name }}-unsigned.ipa Payload/
+          zip -r -q vibedIPAManager-unstable.ipa Payload/
           rm -rf Payload
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: vibedIPAManager-${{ github.ref_name }}
-          path: vibedIPAManager-${{ github.ref_name }}-unsigned.ipa
+          path: vibedIPAManager-unstable.ipa
           retention-days: 30
 
   release:
     needs: build
     runs-on: ubuntu-latest
-    name: Create Release
+    name: Create Unstable Pre-release
+    if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/')
     permissions:
       contents: write
 
@@ -73,32 +74,15 @@ jobs:
         with:
           name: vibedIPAManager-${{ github.ref_name }}
 
-      - name: Determine release metadata
-        id: release_meta
-        run: |
-          BRANCH_NAME="${{ github.ref_name }}"
-          if [[ "$BRANCH_NAME" == "main" ]]; then
-            echo "tag_name=v${{ github.run_number }}" >> $GITHUB_OUTPUT
-            echo "release_name=Release ${{ github.run_number }}" >> $GITHUB_OUTPUT
-            echo "prerelease=false" >> $GITHUB_OUTPUT
-          elif [[ "$BRANCH_NAME" == "develop" ]]; then
-            echo "tag_name=v${{ github.run_number }}-beta" >> $GITHUB_OUTPUT
-            echo "release_name=Beta ${{ github.run_number }}" >> $GITHUB_OUTPUT
-            echo "prerelease=true" >> $GITHUB_OUTPUT
-          else
-            echo "tag_name=v${{ github.run_number }}-$BRANCH_NAME" >> $GITHUB_OUTPUT
-            echo "release_name=$BRANCH_NAME Build ${{ github.run_number }}" >> $GITHUB_OUTPUT
-            echo "prerelease=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create GitHub release
+      - name: Create GitHub unstable pre-release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release_meta.outputs.tag_name }}
-          name: ${{ steps.release_meta.outputs.release_name }}
+          tag_name: unstable
+          name: Unstable Pre-release
           generate_release_notes: true
-          prerelease: ${{ steps.release_meta.outputs.prerelease }}
+          prerelease: true
+          overwrite_files: true
           files: |
-            vibedIPAManager-${{ github.ref_name }}-unsigned.ipa
+            vibedIPAManager-unstable.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
