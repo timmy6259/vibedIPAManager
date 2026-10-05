@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct DebugLogEntry: Identifiable, Equatable {
     let id: UUID
@@ -14,6 +15,16 @@ struct DebugLogEntry: Identifiable, Equatable {
         self.level = level
         self.category = category
         self.message = message
+    }
+
+    var formattedTimestamp: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter.string(from: timestamp)
+    }
+
+    var fullText: String {
+        "[\(level.rawValue)] [\(category)] [\(formattedTimestamp)] \(message)"
     }
 }
 
@@ -67,6 +78,10 @@ final class DebugLogger: ObservableObject {
         }
     }
 
+    func copyAllLogs() -> String {
+        return entries.map { $0.fullText }.joined(separator: "\n")
+    }
+
     private func log(_ message: String, level: DebugLogLevel, category: String) {
         let entry = DebugLogEntry(level: level, category: category, message: message)
         print("[\(level.rawValue)] [\(category)] \(message)")
@@ -84,6 +99,8 @@ final class DebugLogger: ObservableObject {
 struct DebugDockBar: View {
     @ObservedObject var logger: DebugLogger
     @State private var isExpanded = true
+    @State private var copiedEntryID: UUID?
+    @State private var copiedAllLogs = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -93,6 +110,12 @@ struct DebugDockBar: View {
                     .fontWeight(.semibold)
 
                 Spacer()
+
+                Button(action: { copyAllLogs() }) {
+                    Label(copiedAllLogs ? "Copied" : "Copy All", systemImage: copiedAllLogs ? "checkmark" : "doc.on.doc")
+                        .font(.caption2)
+                }
+                .buttonStyle(.borderless)
 
                 Button(action: { isExpanded.toggle() }) {
                     Label(isExpanded ? "Hide" : "Show", systemImage: isExpanded ? "chevron.down" : "chevron.up")
@@ -113,7 +136,7 @@ struct DebugDockBar: View {
             if isExpanded {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 6) {
-                        ForEach(Array(logger.entries.suffix(8).reversed()), id: \ .id) { entry in
+                        ForEach(Array(logger.entries.suffix(8).reversed()), id: \.id) { entry in
                             HStack(alignment: .top, spacing: 8) {
                                 Circle()
                                     .fill(entry.level.tintColor)
@@ -121,7 +144,7 @@ struct DebugDockBar: View {
                                     .padding(.top, 6)
 
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("[\(entry.level.rawValue)] \(entry.category)")
+                                    Text("[\(entry.level.rawValue)] \(entry.category) • \(entry.formattedTimestamp)")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
 
@@ -131,6 +154,16 @@ struct DebugDockBar: View {
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .multilineTextAlignment(.leading)
                                 }
+
+                                Spacer()
+
+                                Button(action: {
+                                    copyLog(entry)
+                                }) {
+                                    Image(systemName: copiedEntryID == entry.id ? "checkmark" : "doc.on.doc")
+                                        .font(.caption2)
+                                }
+                                .buttonStyle(.borderless)
                             }
                         }
                     }
@@ -146,5 +179,26 @@ struct DebugDockBar: View {
         .padding(.horizontal, 12)
         .padding(.bottom, 10)
         .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: -2)
+    }
+
+    private func copyLog(_ entry: DebugLogEntry) {
+        UIPasteboard.general.string = entry.fullText
+        copiedEntryID = entry.id
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            if copiedEntryID == entry.id {
+                copiedEntryID = nil
+            }
+        }
+    }
+
+    private func copyAllLogs() {
+        let allLogs = logger.copyAllLogs()
+        UIPasteboard.general.string = allLogs
+        copiedAllLogs = true
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            copiedAllLogs = false
+        }
     }
 }

@@ -3,17 +3,21 @@ import ZIPFoundation
 
 class IPAManager {
     static func extractIPA(at ipaURL: URL) throws -> URL {
+        DebugLogger.shared.debug("Starting extraction for \(ipaURL.lastPathComponent)", category: "IPA")
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
 
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
         guard let archive = Archive(url: ipaURL, accessMode: .read) else {
+            DebugLogger.shared.error("Archive could not be opened: \(ipaURL.lastPathComponent)", category: "IPA")
             throw IPAError.extractionFailed
         }
 
+        var extractedCount = 0
         for entry in archive {
             if entry.path.contains("__MACOSX") {
+                DebugLogger.shared.debug("Skipping macOS metadata: \(entry.path)", category: "IPA")
                 continue
             }
 
@@ -27,43 +31,58 @@ class IPAManager {
 
             try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
             try archive.extract(entry, to: destinationURL)
+            extractedCount += 1
         }
 
+        DebugLogger.shared.info("IPA extracted successfully: \(extractedCount) file entries to \(tempDir.lastPathComponent)", category: "IPA")
         return tempDir
     }
 
     static func listFiles(in ipaURL: URL) throws -> [String] {
+        DebugLogger.shared.debug("Listing files inside \(ipaURL.lastPathComponent)", category: "IPA")
         let extractedDir = try extractIPA(at: ipaURL)
         defer { cleanup(extractedDir) }
 
         let results = listAllFilesRecursively(in: extractedDir)
-        return results.sorted()
+        let sortedResults = results.sorted()
+        DebugLogger.shared.info("Found \(sortedResults.count) files in \(ipaURL.lastPathComponent)", category: "IPA")
+        return sortedResults
     }
 
     static func removeFile(at path: String, in ipaURL: URL) throws {
+        DebugLogger.shared.debug("Attempting to remove \(path) from \(ipaURL.lastPathComponent)", category: "IPA")
         let extractedDir = try extractIPA(at: ipaURL)
         defer { cleanup(extractedDir) }
 
         let targetPath = extractedDir.appendingPathComponent(path)
         if FileManager.default.fileExists(atPath: targetPath.path) {
             try FileManager.default.removeItem(at: targetPath)
+            DebugLogger.shared.info("Removed file from extracted IPA: \(path)", category: "IPA")
+        } else {
+            DebugLogger.shared.warning("Target file not found during removal: \(path)", category: "IPA")
         }
 
         try repackageIPA(from: extractedDir, to: ipaURL)
     }
 
     static func repackageIPA(from directory: URL, to outputURL: URL) throws {
+        DebugLogger.shared.debug("Repackaging IPA to \(outputURL.lastPathComponent)", category: "IPA")
         try? FileManager.default.removeItem(at: outputURL)
 
         guard let archive = Archive(url: outputURL, accessMode: .create) else {
+            DebugLogger.shared.error("Failed to create archive for repackaging: \(outputURL.lastPathComponent)", category: "IPA")
             throw IPAError.repackagingFailed
         }
 
+        var packedCount = 0
         for path in listAllFilesRecursively(in: directory) {
             let sourceURL = directory.appendingPathComponent(path)
-            try archive.addEntry(with: path, relativeTo: directory)
             _ = sourceURL
+            try archive.addEntry(with: path, relativeTo: directory)
+            packedCount += 1
         }
+
+        DebugLogger.shared.info("IPA repackaged successfully: \(packedCount) entries added to \(outputURL.lastPathComponent)", category: "IPA")
     }
 
     private static func listAllFilesRecursively(in root: URL) -> [String] {
@@ -89,7 +108,12 @@ class IPAManager {
     }
 
     static func cleanup(_ directory: URL) {
-        try? FileManager.default.removeItem(at: directory)
+        do {
+            try FileManager.default.removeItem(at: directory)
+            DebugLogger.shared.debug("Temporary extraction directory cleaned up: \(directory.lastPathComponent)", category: "IPA")
+        } catch {
+            DebugLogger.shared.warning("Could not clean up temporary directory: \(error.localizedDescription)", category: "IPA")
+        }
     }
 }
 
