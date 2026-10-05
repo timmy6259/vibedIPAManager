@@ -48,12 +48,40 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO
 
+      - name: Debug - List build products
+        run: |
+          echo "=== Listing DerivedData structure ==="
+          find DerivedData -type d -name "*.app" 2>/dev/null || echo "No .app found in DerivedData"
+          echo "=== Full DerivedData listing ==="
+          ls -R DerivedData/Build/Products/ 2>/dev/null || echo "No Products directory found"
+
       - name: Create IPA (unsigned)
         run: |
+          set -euxo pipefail
+
+          # Find the built app dynamically
+          APP_PATH=$(find DerivedData -path '*Build/Products/Release-iphoneos/*.app' -type d | head -n 1)
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: Could not find built app in DerivedData"
+            exit 1
+          fi
+          
+          echo "Found app at: $APP_PATH"
+          
+          # Verify the app exists
+          if [ ! -d "$APP_PATH" ]; then
+            echo "ERROR: App directory does not exist at $APP_PATH"
+            exit 1
+          fi
+          
+          # Create IPA
           mkdir -p Payload
-          cp -r DerivedData/Build/Products/Release-iphoneos/vibedIPAManager.app Payload/
-          zip -r -q vibedIPAManager-${{ github.ref_name }}-unsigned.ipa Payload/
+          cp -R "$APP_PATH" Payload/
+          zip -r -q "vibedIPAManager-${{ github.ref_name }}-unsigned.ipa" Payload/
           rm -rf Payload
+          
+          echo "IPA created successfully"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
