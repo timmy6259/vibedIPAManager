@@ -13,7 +13,7 @@ class IPAManager {
         }
         
         // Check if file is readable
-        guard FileManager.default.isReadableFileAtPath(ipaURL.path) else {
+        guard FileManager.default.isReadableFile(atPath: ipaURL.path) else {
             let errorMsg = "IPA file is not readable: \(ipaURL.path)"
             DebugLogger.shared.error(errorMsg, category: "IPA")
             throw IPAError.fileNotReadable
